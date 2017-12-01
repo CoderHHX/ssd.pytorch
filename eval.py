@@ -45,6 +45,9 @@ parser.add_argument('--top_k', default=5, type=int,
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
 parser.add_argument('--voc_root', default=VOCroot, help='Location of VOC root directory')
+parser.add_argument('--ssd_dim', default=300, type=int, help='SSD300 or SSD512')
+parser.add_argument('--vis', default=False, type=str2bool,
+                    help='vis the detection results')
 
 args = parser.parse_args()
 
@@ -348,9 +351,25 @@ cachedir: Directory for caching the annotations
 
     return rec, prec, ap
 
+def add_rectangles(im, boxes, scores, name_index, min_score = 0.5):
+
+    font_face=cv2.FONT_HERSHEY_TRIPLEX
+    font_scale = 0.6
+    color = (0, 0, 255)
+    for i, score in enumerate(scores):
+        if(score > min_score):
+            bbox = np.array(boxes[i, :], dtype = np.int32)
+            cv2.rectangle(im, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 0, 255), 1)
+            display_txt = '%s: %.2f'%(VOC_CLASSES[name_index], score)
+            cv2.putText(im, display_txt, (bbox[0], bbox[1]), fontFace=font_face, fontScale=font_scale, color=(0,0,255))
+
+    return im
+
+
+
 
 def test_net(save_folder, net, cuda, dataset, transform, top_k,
-             im_size=300, thresh=0.05):
+             im_size=300, thresh=0.05, vis = True):
     """Test a Fast R-CNN network on an image database."""
     num_images = len(dataset)
     # all detections are collected into:
@@ -366,6 +385,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
     for i in range(num_images):
         im, gt, h, w = dataset.pull_item(i)
+        image_vis = dataset.pull_image(i)
 
         x = Variable(im.unsqueeze(0))
         if args.cuda:
@@ -381,15 +401,22 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
             dets = torch.masked_select(dets, mask).view(-1, 5)
             if dets.dim() == 0:
                 continue
+            dets = dets.cpu().numpy()
             boxes = dets[:, 1:]
             boxes[:, 0] *= w
             boxes[:, 2] *= w
             boxes[:, 1] *= h
             boxes[:, 3] *= h
-            scores = dets[:, 0].cpu().numpy()
-            cls_dets = np.hstack((boxes.cpu().numpy(), scores[:, np.newaxis])) \
+            scores = dets[:, 0]
+            cls_dets = np.hstack((boxes, scores[:, np.newaxis])) \
                 .astype(np.float32, copy=False)
             all_boxes[j][i] = cls_dets
+            if(vis):
+                image_vis = add_rectangles(image_vis, boxes, scores, j-1)
+
+        if(vis):
+            cv2.imshow("deteation", image_vis)
+            cv2.waitKey(1000)
 
         print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
                                                     num_images, detect_time))
@@ -409,16 +436,20 @@ def evaluate_detections(box_list, output_dir, dataset):
 if __name__ == '__main__':
     # load net
     num_classes = len(VOC_CLASSES) + 1 # +1 background
-    net = build_ssd('test', 300, num_classes) # initialize SSD
+    net = build_ssd('test', args.ssd_dim, num_classes) # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = VOCDetection(args.voc_root, [('2007', set_type)], BaseTransform(300, dataset_mean), AnnotationTransform())
+    dataset = VOCDetection(args.voc_root, [('2007', set_type)], BaseTransform(args.ssd_dim, dataset_mean), AnnotationTransform())
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True
     # evaluation
-    test_net(args.save_folder, net, args.cuda, dataset,
-             BaseTransform(net.size, dataset_mean), args.top_k, 300,
-             thresh=args.confidence_threshold)
+    test_net(args.save_folder,
+             net,
+             args.cuda, dataset,
+             BaseTransform(args.ssd_dim, dataset_mean),
+             args.top_k, args.ssd_dim,
+             thresh=args.confidence_threshold,
+             vis = args.vis)

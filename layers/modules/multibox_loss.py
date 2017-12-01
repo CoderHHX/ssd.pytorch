@@ -30,6 +30,7 @@ class MultiBoxLoss(nn.Module):
 
     def __init__(self, num_classes, overlap_thresh, prior_for_matching,
                  bkg_label, neg_mining, neg_pos, neg_overlap, encode_target,
+                 variance,
                  use_gpu=True):
         super(MultiBoxLoss, self).__init__()
         self.use_gpu = use_gpu
@@ -41,7 +42,7 @@ class MultiBoxLoss(nn.Module):
         self.do_neg_mining = neg_mining
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
-        self.variance = cfg['variance']
+        self.variance = variance
 
     def forward(self, predictions, targets):
         """Multibox Loss
@@ -59,7 +60,6 @@ class MultiBoxLoss(nn.Module):
         num = loc_data.size(0)
         priors = priors[:loc_data.size(1), :]
         num_priors = (priors.size(0))
-        num_classes = self.num_classes
 
         # match priors (default boxes) and ground truth boxes
         loc_t = torch.Tensor(num, num_priors, 4)
@@ -78,8 +78,6 @@ class MultiBoxLoss(nn.Module):
         conf_t = Variable(conf_t, requires_grad=False)
 
         pos = conf_t > 0
-        num_pos = pos.sum(keepdim=True)
-
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data)
@@ -104,12 +102,15 @@ class MultiBoxLoss(nn.Module):
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
-        conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
-        targets_weighted = conf_t[(pos+neg).gt(0)]
-        loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
+        conf_p = conf_data[(pos_idx+neg_idx).gt(0)]
+        if(conf_p.size(0) > 0):
+            conf_p = conf_p.view(-1, self.num_classes)
+            targets_weighted = conf_t[(pos+neg).gt(0)]
+            loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
+        else:
+            loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1, 1))
 
         # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-
         N = num_pos.data.sum()
         loss_l /= N
         loss_c /= N
