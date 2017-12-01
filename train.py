@@ -132,9 +132,14 @@ def train_one_iters(iteration, lr):
         t1 = time.time()
         loc_loss += loss_l.data[0]
         conf_loss += loss_c.data[0]
-        if i % 100 == 0:
+        if 0:
             print('iter ' + repr(iteration) + ' || LR: {:.5f} || Timer: {:.5f} sec.'.format(lr, (t1 - t0)), end=' || ')
             print('batch: '+ repr(i) + '/' +repr(len(data_loader)) +' || Loss: %.4f' % (loss.data[0]), end='\n')
+
+    loc_loss = loc_loss / len(data_loader)
+    conf_loss = conf_loss / len(data_loader)
+    print('iter ' + repr(iteration) + ' || LR: {:.5f} || Timer: {:.5f} sec.'.format(lr, (t1 - t0)), end=' || ')
+    print('loc_loss: {:.4f} || conf_loss: {:.4}.'.format(loc_loss, conf_loss))
 
     torch.save(ssd_net.state_dict(), 'weights/ssd'+str(ssd_dim)+ '_0712_' +
                        repr(iteration) + '.pth')
