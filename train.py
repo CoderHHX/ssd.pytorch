@@ -56,7 +56,7 @@ num_classes = len(VOC_CLASSES) + 1
 batch_size = args.batch_size
 max_iter = args.iterations
 weight_decay = args.weight_decay
-stepvalues = (80, 100, 120)
+stepvalues = (80, 120)
 gamma = args.gamma
 momentum = args.momentum
 
@@ -112,6 +112,7 @@ data_loader = data.DataLoader(dataset, batch_size, num_workers=args.num_workers,
 def train_one_iters(iteration, lr):
     loc_loss = 0
     conf_loss = 0
+    t0 = time.time()
     for i, (images, targets) in enumerate(data_loader):
         if args.cuda:
             images = Variable(images.cuda())
@@ -121,7 +122,6 @@ def train_one_iters(iteration, lr):
             targets = [Variable(anno, volatile=True) for anno in targets]
 
         # forward
-        t0 = time.time()
         out = net(images)
         # backprop
         optimizer.zero_grad()
@@ -129,16 +129,15 @@ def train_one_iters(iteration, lr):
         loss = loss_l + loss_c
         loss.backward()
         optimizer.step()
-        t1 = time.time()
         loc_loss += loss_l.data[0]
         conf_loss += loss_c.data[0]
         if 0:
             print('iter ' + repr(iteration) + ' || LR: {:.5f} || Timer: {:.5f} sec.'.format(lr, (t1 - t0)), end=' || ')
             print('batch: '+ repr(i) + '/' +repr(len(data_loader)) +' || Loss: %.4f' % (loss.data[0]), end='\n')
-
+    t1 = time.time()
     loc_loss = loc_loss / len(data_loader)
     conf_loss = conf_loss / len(data_loader)
-    print('iter ' + repr(iteration) + ' || LR: {:.5f} || Timer: {:.5f} sec.'.format(lr, (t1 - t0)), end=' || ')
+    print('iter ' + repr(iteration) + ' || LR: {:.5f} || Timer: {:.2f} sec.'.format(lr, (t1 - t0)), end=' || ')
     print('loc_loss: {:.4f} || conf_loss: {:.4}.'.format(loc_loss, conf_loss))
 
     torch.save(ssd_net.state_dict(), 'weights/ssd'+str(ssd_dim)+ '_0712_' +
