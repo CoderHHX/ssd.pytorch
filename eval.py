@@ -416,7 +416,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
         if(vis):
             cv2.imshow("deteation", image_vis)
-            cv2.waitKey(1000)
+            cv2.waitKey(0)
 
         print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
                                                     num_images, detect_time))

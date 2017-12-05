@@ -102,12 +102,12 @@ class ToPercentCoords(object):
 
 
 class Resize(object):
-    def __init__(self, size=300):
-        self.size = size
+    def __init__(self, height=300, width =300):
+        self.height = height
+        self.width = width
 
     def __call__(self, image, boxes=None, labels=None):
-        image = cv2.resize(image, (self.size,
-                                 self.size))
+        image = cv2.resize(image, (self.width, self.height))
         return image, boxes, labels
 
 
@@ -231,7 +231,7 @@ class RandomSampleCrop(object):
             (None, None),
         )
 
-    def __call__(self, image, boxes=None, labels=None):
+    def __call__(self, image, boxes=None, labels=None, default_asp = 1.0):
         height, width, _ = image.shape
         while True:
             # randomly choose a mode
@@ -253,7 +253,7 @@ class RandomSampleCrop(object):
                 h = random.uniform(0.3 * height, height)
 
                 # aspect ratio constraint b/t .5 & 2
-                if h / w < 0.5 or h / w > 2:
+                if h / w < default_asp * 0.5 or h / w > default_asp / 0.5:
                     continue
 
                 left = random.uniform(width - w)
@@ -398,9 +398,10 @@ class PhotometricDistort(object):
 
 
 class SSDAugmentation(object):
-    def __init__(self, size=300, mean=(104, 117, 123)):
+    def __init__(self, height = 300, width = 300, mean=(104, 117, 123)):
         self.mean = mean
-        self.size = size
+        self.height = height
+        self.width = width
         self.augment = Compose([
             ConvertFromInts(),
             ToAbsoluteCoords(),
@@ -409,7 +410,7 @@ class SSDAugmentation(object):
             RandomSampleCrop(),
             RandomMirror(),
             ToPercentCoords(),
-            Resize(self.size),
+            Resize(width = int(self.width), height=int(self.height)),
             SubtractMeans(self.mean)
         ])
 
