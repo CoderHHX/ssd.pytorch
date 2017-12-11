@@ -134,7 +134,7 @@ def train_one_iters(iteration, lr, clip = 4.0):
         optimizer.step()
         loc_loss += loss_l.data[0]
         conf_loss += loss_c.data[0]
-        if 1:
+        if 0:
             print('batch: '+ repr(i) + '/' +repr(len(data_loader)) +' || Loss: %.4f' % (loss.data[0]), end='\n')
     t1 = time.time()
     loc_loss = loc_loss / len(data_loader)
@@ -142,8 +142,9 @@ def train_one_iters(iteration, lr, clip = 4.0):
     print('iter ' + repr(iteration) + ' || LR: {:.5f} || Timer: {:.2f} sec.'.format(lr, (t1 - t0)), end=' || ')
     print('loc_loss: {:.4f} || conf_loss: {:.4}.'.format(loc_loss, conf_loss))
 
-    torch.save(ssd_net.state_dict(), 'weights/ssd'+str(ssd_dim)+ '_MPII_' +
-                       repr(iteration) + '.pth')
+    if((iteration+1) % 10 == 0):
+        torch.save(ssd_net.state_dict(), 'weights/ssd'+str(ssd_dim)+ '_MPII_' +
+                           repr(iteration+1) + '.pth')
 
 def train_net():
     lr = args.lr

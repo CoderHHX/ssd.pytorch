@@ -14,7 +14,7 @@ from data import VOCroot
 from data import VOC_CLASSES as labelmap
 import torch.utils.data as data
 
-from data import MpiiAnnotationTransform, MpiiDetection, BaseTransform, MPII_CLASSES
+from data import MpiiAnnotationTransform, MpiiDetection, BaseTransform, MPII_CLASSES, v2
 from ssd import build_ssd
 
 import sys
@@ -40,7 +40,7 @@ parser.add_argument('--top_k', default=5, type=int,
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
 parser.add_argument('--voc_root', default=VOCroot, help='Location of VOC root directory')
-parser.add_argument('--ssd_dim', default=300, type=int, help='SSD300 or SSD512')
+parser.add_argument('--ssd_height', default=512, type=int, help='SSD300 or SSD512')
 parser.add_argument('--vis', default=False, type=str2bool,
                     help='vis the detection results')
 
@@ -158,7 +158,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 
         if(vis):
             cv2.imshow("deteation", image_vis)
-            cv2.waitKey(0)
+            cv2.waitKey(2000)
 
         print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
                                                     num_images, detect_time))
@@ -170,14 +170,16 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
 if __name__ == '__main__':
     # load net
     num_classes = len(MPII_CLASSES) + 1 # +1 background
-    net = build_ssd('test', args.ssd_dim, num_classes) # initialize SSD
+    net = build_ssd('test', args.ssd_height, num_classes) # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')
     # load data
     dataset = MpiiDetection('/home1/kongtao/workspace/dataset/MPII/images',
                             '/home1/kongtao/workspace/dataset/MPII/mpii_box_keypoints_annotations.json',
-                            BaseTransform(args.ssd_dim, dataset_mean),
+                            BaseTransform(height=args.ssd_height,
+                                          width=args.ssd_height * v2[str(args.ssd_height)]['map_asp'],
+                                          mean = dataset_mean),
                             MpiiAnnotationTransform(),
                             is_train=False)
     if args.cuda:
@@ -187,7 +189,9 @@ if __name__ == '__main__':
     test_net(args.save_folder,
              net,
              args.cuda, dataset,
-             BaseTransform(args.ssd_dim, dataset_mean),
-             args.top_k, args.ssd_dim,
+             BaseTransform(height=args.ssd_height,
+                           width=args.ssd_height * v2[str(args.ssd_height)]['map_asp'],
+                           mean = dataset_mean),
+             args.top_k, args.ssd_height,
              thresh=args.confidence_threshold,
              vis = args.vis)

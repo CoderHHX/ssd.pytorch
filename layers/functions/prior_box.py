@@ -20,7 +20,8 @@ class PriorBox(object):
         # number of priors for feature map location (either 4 or 6)
         self.num_priors = len(cfg['aspect_ratios'])
         self.variance = cfg['variance'] or [0.1]
-        self.feature_maps = cfg['feature_maps']
+        self.feature_maps_min = cfg['feature_maps_min']
+        self.feature_maps_max = cfg['feature_maps_max']
         self.min_sizes = cfg['min_sizes']
         self.max_sizes = cfg['max_sizes']
         self.steps = cfg['steps']
@@ -35,9 +36,9 @@ class PriorBox(object):
         mean = []
         # TODO merge these
         if self.version == 'v2':
-            for k, f_h in enumerate(self.feature_maps):
+            for k, f_h in enumerate(self.feature_maps_min):
                 for i_h in range(f_h):
-                    for j_w in range(int(f_h * self.map_asp)):
+                    for j_w in range(self.feature_maps_max[k]):
                         # f_k = self.image_size / self.steps[k]
                         f_k_h = self.image_height / self.steps[k]
                         f_k_w = self.image_width / self.steps[k]
