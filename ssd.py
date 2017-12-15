@@ -41,6 +41,10 @@ class SSD(nn.Module):
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
 
+        self.big_conv2d256 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+        self.big_conv2d512 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
+        self.big_conv2d1024 = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
+
         if phase == 'test':
             self.softmax = nn.Softmax()
             self.detect = Detect(num_classes, 0, top_k, 0.01, 0.45, variance=config['variance'])
@@ -68,6 +72,8 @@ class SSD(nn.Module):
         loc = list()
         conf = list()
 
+        deconv_sources = list()
+
         # apply vgg up to conv4_3 relu
         for k in range(23):
             x = self.vgg[k](x)
@@ -80,16 +86,22 @@ class SSD(nn.Module):
             x = self.vgg[k](x)
         sources.append(x)
 
+
         # apply extra layers and cache source layer outputs
         for k, v in enumerate(self.extras):
             x = F.relu(v(x), inplace=True)
             if k % 2 == 1:
                 sources.append(x)
 
+        deconv_sources.append(sources[-1])
+        # add reverse connection
+        for i in range(len(sources)-1):
+            deconv_sources.append(self._upsample_add(sources[-1-i], sources[-2-i]))
+
         # apply multibox head to source layers
-        for (x, l, c) in zip(sources, self.loc, self.conf):
-            loc.append(l(x).permute(0, 2, 3, 1).contiguous())
-            conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+        for i, (x, l, c) in enumerate(zip(sources, self.loc, self.conf)):
+            loc.append(l(deconv_sources[-1-i]).permute(0, 2, 3, 1).contiguous())
+            conf.append(c(deconv_sources[-1-i]).permute(0, 2, 3, 1).contiguous())
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
@@ -116,6 +128,33 @@ class SSD(nn.Module):
             print('Finished!')
         else:
             print('Sorry only .pth and .pkl files supported.')
+
+    def _upsample_add(self, x, y):
+        '''Upsample and add two feature maps.
+        Args:
+          x: (Variable) top feature map to be upsampled.
+          y: (Variable) lateral feature map.
+        Returns:
+          (Variable) added feature map.
+        Note in PyTorch, when input size is odd, the upsampled feature map
+        with `F.upsample(..., scale_factor=2, mode='nearest')`
+        maybe not equal to the lateral feature map size.
+        e.g.
+        original input size: [N,_,15,15] ->
+        conv2d feature map size: [N,_,8,8] ->
+        upsampled feature map size: [N,_,16,16]
+        So we choose bilinear upsample which supports arbitrary output sizes.
+        '''
+        _,C_y,H,W = y.size()
+        _,C_x,_,_ = x.size()
+        if(C_y != C_x):
+            if(C_x == 256):
+                x = self.big_conv2d256(x)
+            elif(C_x == 512):
+                x = self.big_conv2d512(x)
+            elif(C_x == 1024):
+                x = self.big_conv2d1024(x)
+        return F.upsample(x, size=(H,W), mode='bilinear') + y
 
 
 # This function is derived from torchvision VGG make_layers()

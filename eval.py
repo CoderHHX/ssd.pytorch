@@ -213,6 +213,7 @@ def voc_ap(rec, prec, use_07_metric=True):
 
         # and sum (\Delta recall) * prec
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
+
     return ap
 
 
@@ -305,8 +306,8 @@ cachedir: Directory for caching the annotations
         tp = np.zeros(nd)
         fp = np.zeros(nd)
         for d in range(nd):
-            R = class_recs[image_ids[d]]
-            bb = BB[d, :].astype(float)
+            R = class_recs[image_ids[d]] ## gt
+            bb = BB[d, :].astype(float)  ## det 1
             ovmax = -np.inf
             BBGT = R['bbox'].astype(float)
             if BBGT.size > 0:

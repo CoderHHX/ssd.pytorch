@@ -1,5 +1,6 @@
 from .voc0712 import VOCDetection, AnnotationTransform, detection_collate, VOC_CLASSES
 from .mpii import MpiiDetection, MpiiAnnotationTransform, MPII_CLASSES
+from .coco import COCODetection, COCOAnnotationTransform, COCO_CLASSES
 
 from .config import *
 import cv2
