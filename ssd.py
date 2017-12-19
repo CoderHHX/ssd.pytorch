@@ -24,7 +24,7 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, config, phase, base, extras, head, num_classes, top_k=200):
+    def __init__(self, config, phase, base, extras, head, num_classes, top_k=200, reverse = True):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes
@@ -41,9 +41,12 @@ class SSD(nn.Module):
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
 
-        self.big_conv2d256 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
-        self.big_conv2d512 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
-        self.big_conv2d1024 = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
+        self.is_reverse = reverse
+
+        if(self.is_reverse):
+            self.big_conv2d256 = nn.Conv2d(256, 512, kernel_size=3, padding=1)
+            self.big_conv2d512 = nn.Conv2d(512, 1024, kernel_size=3, padding=1)
+            self.big_conv2d1024 = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
 
         if phase == 'test':
             self.softmax = nn.Softmax()
@@ -72,7 +75,8 @@ class SSD(nn.Module):
         loc = list()
         conf = list()
 
-        deconv_sources = list()
+        if(self.is_reverse):
+            deconv_sources = list()
 
         # apply vgg up to conv4_3 relu
         for k in range(23):
@@ -93,15 +97,22 @@ class SSD(nn.Module):
             if k % 2 == 1:
                 sources.append(x)
 
-        deconv_sources.append(sources[-1])
-        # add reverse connection
-        for i in range(len(sources)-1):
-            deconv_sources.append(self._upsample_add(sources[-1-i], sources[-2-i]))
+        if(self.is_reverse):
+            deconv_sources.append(sources[-1])
+            # add reverse connection
+            for i in range(len(sources)-1):
+                deconv_sources.append(self._upsample_add(sources[-1-i], sources[-2-i]))
 
-        # apply multibox head to source layers
-        for i, (x, l, c) in enumerate(zip(sources, self.loc, self.conf)):
-            loc.append(l(deconv_sources[-1-i]).permute(0, 2, 3, 1).contiguous())
-            conf.append(c(deconv_sources[-1-i]).permute(0, 2, 3, 1).contiguous())
+            # apply multibox head to source layers
+            for i, (x, l, c) in enumerate(zip(sources, self.loc, self.conf)):
+                loc.append(l(deconv_sources[-1-i]).permute(0, 2, 3, 1).contiguous())
+                conf.append(c(deconv_sources[-1-i]).permute(0, 2, 3, 1).contiguous())
+        else:
+            # apply multibox head to source layers
+            for (x, l, c) in zip(sources, self.loc, self.conf):
+                loc.append(l(x).permute(0, 2, 3, 1).contiguous())
+                conf.append(c(x).permute(0, 2, 3, 1).contiguous())
+
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
@@ -236,7 +247,7 @@ mbox = {
 }
 
 
-def build_ssd(phase, size=300, num_classes=21, top_k=200):
+def build_ssd(phase, size=300, num_classes=21, top_k=200, reverse = True):
     if phase != "test" and phase != "train":
         print("Error: Phase not recognized")
         return
@@ -253,4 +264,4 @@ def build_ssd(phase, size=300, num_classes=21, top_k=200):
                          add_extras(extras[size_key], 1024),
                          mbox[size_key], num_classes),
                num_classes=num_classes,
-               top_k=top_k)
+               top_k=top_k, reverse = reverse)

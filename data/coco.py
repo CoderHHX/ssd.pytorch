@@ -56,7 +56,7 @@ class COCOAnnotationTransform(object):
             a list containing lists of bounding boxes  [bbox coords, class name]
         """
         res = []
-        valid_objs = []
+        key_points_all = np.zeros((0, 3), dtype = np.float32)
         for obj in target:
             x1 = np.max((0, obj['bbox'][0]))
             y1 = np.max((0, obj['bbox'][1]))
@@ -79,10 +79,19 @@ class COCOAnnotationTransform(object):
                     bndbox.append(float(y2)/height)
                     bndbox.append(0)
                     res += [bndbox]
-        if(len(res) == 0):
-            return res, False
 
-        return res, True
+            # keypoints
+            key_points = np.array(obj['keypoints']).reshape(-1, 3).astype(np.float32)
+            key_points[:, 0] = key_points[:, 0] / width
+            key_points[:, 1] = key_points[:, 1] / height
+            key_points_all = np.vstack((key_points_all, key_points))
+
+
+
+        if(len(res) == 0):
+            return res, key_points_all, False
+
+        return res, key_points_all, True
 
 
 class COCODetection(data.Dataset):
@@ -119,7 +128,7 @@ class COCODetection(data.Dataset):
             json_file = osp.join(self.root,'annotations', 'person_keypoints_'+image_set+'.json')
             coco = COCO(json_file)
             self.cocos.append(coco)
-            imgIds = self.get_anns(coco, is_train = train)
+            imgIds = self.get_anns(coco)
             for img_id in imgIds:
                 self.data_index.append(i)
                 self.imgIds.append(img_id)
@@ -146,17 +155,15 @@ class COCODetection(data.Dataset):
                 'Path does not exist: {}'.format(image_path)
         return image_path
 
-    def get_anns(self, coco, is_train):
+    def get_anns(self, coco):
         imgIds = coco.getImgIds()
         valid_imgIds = []
         for i, imgId in enumerate(imgIds):
-            if(is_train == False):
+            if(self.is_train == False):
                 valid_imgIds.append(imgId)
                 continue
 
             img = coco.loadImgs(imgId)[0]
-            im_size = [3, img["height"], img["width"]]
-            im_path = img["file_name"]
             annIds = coco.getAnnIds(imgIds=img['id'], iscrowd=False)
             anns = coco.loadAnns(annIds)
             # Consider only images with people
@@ -192,18 +199,14 @@ class COCODetection(data.Dataset):
 
         annIds = coco.getAnnIds(imgIds=img_infos['id'], iscrowd=False)
         target = coco.loadAnns(annIds)
-
+        key_points = []
         if self.target_transform is not None:
-            target, has_boxes = self.target_transform(target, width, height, self.is_train)
+            target, key_points, has_boxes = self.target_transform(target, width, height, self.is_train)
 
         if self.transform is not None:
             target = np.array(target)
-
             if(self.is_train):
-                try:
-                    img, target, labels = self.transform(img, target[:, :4], target[:, 4])
-                except:
-                    print(np.shape(target), np.shape(img), has_boxes)
+                img, target, labels, key_points = self.transform(img, target[:, :4], target[:, 4], key_points)
             else:
                 if(np.shape(target)[0] == 0):
                     img, target, labels = self.transform(img, None, None)

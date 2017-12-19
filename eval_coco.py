@@ -43,6 +43,7 @@ parser.add_argument('--voc_root', default=VOCroot, help='Location of VOC root di
 parser.add_argument('--ssd_height', default=512, type=int, help='SSD300 or SSD512')
 parser.add_argument('--vis', default=False, type=str2bool,
                     help='vis the detection results')
+parser.add_argument('--is_reverse', default=True, type=str2bool, help='Add reverse connections at SSD')
 
 args = parser.parse_args()
 
@@ -193,7 +194,7 @@ def test_net(save_folder, net, cuda, dataset, transform, top_k,
         pickle.dump(all_gts, f, pickle.HIGHEST_PROTOCOL)
 
     print('Evaluating detections')
-    evaluate_detections(all_boxes, all_gts)
+    evaluate_detections(all_boxes, all_gts, use_07_metric=False)
 
 def evaluate_detections(all_boxes, all_gts, ovthresh = 0.5, use_07_metric = True):
 
@@ -214,10 +215,11 @@ def evaluate_detections(all_boxes, all_gts, ovthresh = 0.5, use_07_metric = True
     for d in range(nd):
         bb = all_boxes[d].astype(float)
         ovmax = -np.inf
-        BBGT = all_gts[int(all_boxes[d, -1])].astype(float)
+        BBGT = all_gts[int(all_boxes[d, -1])]
         if np.shape(BBGT)[0] > 0:
             # compute overlaps
             # intersection
+            BBGT = BBGT.astype(float)
             ixmin = np.maximum(BBGT[:, 0], bb[0])
             iymin = np.maximum(BBGT[:, 1], bb[1])
             ixmax = np.minimum(BBGT[:, 2], bb[2])
@@ -290,7 +292,7 @@ def voc_ap(rec, prec, use_07_metric=True):
 if __name__ == '__main__':
     # load net
     num_classes = len(COCO_CLASSES) + 1 # +1 background
-    net = build_ssd('test', args.ssd_height, num_classes) # initialize SSD
+    net = build_ssd('test', args.ssd_height, num_classes, reverse=args.is_reverse) # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.eval()
     print('Finished loading model!')

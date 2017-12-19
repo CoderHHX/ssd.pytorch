@@ -8,7 +8,8 @@ import argparse
 from torch.autograd import Variable
 import torch.utils.data as data
 from data import v2, COCOAnnotationTransform, COCODetection, detection_collate, COCO_CLASSES
-from utils.augmentations import SSDAugmentation
+# from utils.augmentations import SSDAugmentation
+from utils.augmentations_pose import SSDAugmentation
 from layers.modules import MultiBoxLoss
 from ssd import build_ssd
 import numpy as np
@@ -18,7 +19,7 @@ def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
 parser = argparse.ArgumentParser(description='Single Shot MultiBox Detector Training')
-parser.add_argument('--basenet', default='vgg16_reducedfc.pth', help='pretrained base model')
+parser.add_argument('--basenet', default='pretrained/vgg16_reducedfc.pth', help='pretrained base model')
 parser.add_argument('--jaccard_threshold', default=0.5, type=float, help='Min Jaccard index for matching')
 parser.add_argument('--batch_size', default=16, type=int, help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str, help='Resume from checkpoint')
@@ -35,6 +36,7 @@ parser.add_argument('--visdom', default=False, type=str2bool, help='Use visdom t
 parser.add_argument('--send_images_to_visdom', type=str2bool, default=False, help='Sample a random image from each 10th batch, send it to visdom after augmentations step')
 parser.add_argument('--save_folder', default='weights/', help='Location to save checkpoint models')
 parser.add_argument('--ssd_height', default=512, type=int, help='SSD300 or 512')
+parser.add_argument('--is_reverse', default=True, type=str2bool, help='Add reverse connections at SSD')
 
 args = parser.parse_args()
 
@@ -58,13 +60,13 @@ weight_decay = args.weight_decay
 stepvalues = (60, 80)
 gamma = args.gamma
 momentum = args.momentum
-train_sets = ['train2017']
+train_sets = ['val2017']
 root_path = '/home1/kongtao/workspace/dataset/COCO/2017'
 if args.visdom:
     import visdom
     viz = visdom.Visdom()
 
-ssd_net = build_ssd('train', ssd_dim, num_classes)
+ssd_net = build_ssd('train', ssd_dim, num_classes, reverse=args.is_reverse)
 net = ssd_net
 
 if args.cuda:
@@ -75,7 +77,7 @@ if args.resume:
     print('Resuming training, loading {}...'.format(args.resume))
     ssd_net.load_weights(args.resume)
 else:
-    vgg_weights = torch.load(args.save_folder + args.basenet)
+    vgg_weights = torch.load(args.basenet)
     print('Loading base network...')
     ssd_net.vgg.load_state_dict(vgg_weights)
 
@@ -106,7 +108,7 @@ criterion = MultiBoxLoss(num_classes, 0.5, True, 0, True, 3, 0.5, False, cfg[str
 
 dataset = COCODetection(root_path, train_sets,
                         SSDAugmentation(height=args.ssd_height, width=args.ssd_height * v2[str(args.ssd_height)]['map_asp'], mean = means),
-                        COCOAnnotationTransform())
+                        COCOAnnotationTransform(),train = True)
 
 data_loader = data.DataLoader(dataset, batch_size, num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate, pin_memory=True)
